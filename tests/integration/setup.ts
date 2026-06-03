@@ -107,5 +107,9 @@ function pickTestUrl(): string {
         '`npm run test:integration:setup-db` first or set DATABASE_URL_TEST.',
     )
   }
+  // Idempotent: Vitest 4 re-evaluates this setup file per test file in the
+  // shared worker (isolate: false), and DATABASE_URL was already rewritten
+  // by the first evaluation — don't append `_test` again.
+  if (/_test(\?|$)/.test(new URL(dev).pathname)) return dev
   return dev.replace(/\/([^/?]+)(\?|$)/, '/$1_test$2')
 }

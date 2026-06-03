@@ -32,6 +32,15 @@ export default defineConfig({
       { find: /^@\/(.*)$/, replacement: path.join(srcDir, '$1') },
     ],
   },
+  // tsconfig has `"jsx": "preserve"` (Next.js transforms JSX itself), but
+  // Vitest 4's bundled rolldown-vite honors "preserve" and then fails to
+  // parse the untransformed JSX in imported .tsx modules (emails, json-ld).
+  // Force the automatic runtime for test transforms only.
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+    },
+  },
   test: {
     include: ['tests/integration/**/*.test.ts'],
     setupFiles: ['tests/integration/setup.ts'],

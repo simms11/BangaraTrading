@@ -11,7 +11,7 @@
  * assert (a) the caller gets `resend_timeout_8s`, (b) the abort REALLY
  * reached the socket layer, (c) the failed email was queued for retry.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 
 // The integration suite's global setup mocks @/lib/email; this file
 // needs the real send path.
@@ -78,6 +78,13 @@ async function waitForRequestInFlight(state: HungFetchState): Promise<void> {
   }
   throw new Error('fetch was never called — send path did not reach the network layer')
 }
+
+// Mirror m10: this file caches @/lib/email bound to ITS render/template
+// mocks in the shared module cache (isolate: false). Drop that copy so
+// later files re-evaluate cleanly against their own mock context.
+afterAll(() => {
+  vi.resetModules()
+})
 
 describe('m13 — Resend deadline aborts the in-flight request', () => {
   beforeEach(async () => {
