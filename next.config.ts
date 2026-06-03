@@ -101,6 +101,17 @@ export default withSentryConfig(withPayload(nextConfig), {
       removeDebugLogging: true,
     },
   },
+  // Sentry 10 ships a substantially larger client/edge SDK than 8 (the
+  // bundle-budget jump showed up immediately after the upgrade). Shave the
+  // parts we don't use: replay is error-sampled only (no shadow-DOM/iframe/
+  // worker capture needed) and logs/debug statements are server-side
+  // concerns here.
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayShadowDom: true,
+    excludeReplayIframe: true,
+    excludeReplayWorker: true,
+  },
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,

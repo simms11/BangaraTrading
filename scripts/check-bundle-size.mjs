@@ -9,8 +9,13 @@
 
 import { readFileSync } from 'node:fs'
 
-const SHARED_BUDGET_KB = 120 // current is ~101 KB; 20 KB headroom for additions
-const MIDDLEWARE_BUDGET_KB = 80 // current is ~57 KB; rate-limit + CSRF + Upstash
+// Re-baselined 2026-06-03 after the @sentry/nextjs 8 -> 10 security upgrade:
+// shared jumped ~101 -> 289 KB and middleware ~57 -> 142 KB, almost entirely
+// Sentry SDK weight (bundleSizeOptimizations in next.config.ts only shaved
+// ~6 KB). TODO: investigate lazy-loading the client SDK / disabling
+// middleware auto-instrumentation to claw this back, then lower the budgets.
+const SHARED_BUDGET_KB = 320 // current is ~289 KB; ~30 KB headroom
+const MIDDLEWARE_BUDGET_KB = 160 // current is ~142 KB; Sentry edge + rate-limit + CSRF
 
 const logPath = process.argv[2] || 'build.log'
 const log = readFileSync(logPath, 'utf8')

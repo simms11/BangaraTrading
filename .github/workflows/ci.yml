@@ -56,8 +56,48 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Prime DB schema (B5 workaround)
+        # The cold CI postgres has no schema and nothing runs migrations
+        # (audit B5; the migrate CLI itself is broken — B2). Boot the app
+        # once in dev mode: Payload pushes the schema on init (the same
+        # mechanism the integration suite relies on), in a single process so
+        # parallel build workers never race DDL (B1). Then swap drizzle's
+        # dev sentinel for the real migration names so the prod-mode build
+        # treats the DB as migrated and the runtime migrator stays idle —
+        # the configuration the Phase-5.24 audit verified green.
+        run: |
+          npm run dev > devprime.log 2>&1 &
+          npx wait-on http://localhost:3000/api/health -t 180000 || { tail -50 devprime.log; exit 1; }
+          pkill -f "next dev" || true
+          pkill -f "next-server" || true
+          sleep 2
+          psql "$DATABASE_URL" -c "DELETE FROM payload_migrations WHERE batch = -1"
+          for f in src/payload/migrations/*.ts; do
+            b=$(basename "$f" .ts)
+            [ "$b" = "index" ] && continue
+            psql -q "$DATABASE_URL" -c "INSERT INTO payload_migrations (name, batch) VALUES ('$b', 1)"
+          done
       - name: Build
         id: build
+        env:
+          # `next build` runs with NODE_ENV=production, which trips the
+          # payload.config boot guard (H1/M9: hard-fail on missing prod env
+          # vars). CI satisfies it with obviously-dummy values; none of
+          # these services are reached at build time.
+          # PAYLOAD_DISABLE_SCHEMA_PUSH=true puts the adapter in
+          # migrations-only mode (no push prompt) against the primed DB.
+          RESEND_API_KEY: re_ci_dummy
+          STRIPE_SECRET_KEY: sk_test_ci_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+          FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-ci-dummy
+          FLUTTERWAVE_WEBHOOK_SECRET: ci-dummy
+          UPSTASH_REDIS_REST_URL: https://ci-dummy.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: ci-dummy
+          R2_BUCKET: ci-dummy
+          R2_ACCESS_KEY_ID: ci-dummy
+          R2_SECRET_ACCESS_KEY: ci-dummy
+          R2_ACCOUNT_ID: ci-dummy
+          PAYLOAD_DISABLE_SCHEMA_PUSH: "true"
         run: |
           set -o pipefail
           npm run build 2>&1 | tee build.log
@@ -91,15 +131,55 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+      - name: Prime DB schema + seed (B5 workaround)
+        # Schema push + catalog seed happen against the dev server because
+        # the dev seed route hard-refuses NODE_ENV=production (by design).
+        # See the quality job's prime step for the full B5/B2/B1 rationale.
+        run: |
+          npm run dev > devprime.log 2>&1 &
+          npx wait-on http://localhost:3000/api/health -t 180000 || { tail -50 devprime.log; exit 1; }
+          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
+          pkill -f "next dev" || true
+          pkill -f "next-server" || true
+          sleep 2
+          psql "$DATABASE_URL" -c "DELETE FROM payload_migrations WHERE batch = -1"
+          for f in src/payload/migrations/*.ts; do
+            b=$(basename "$f" .ts)
+            [ "$b" = "index" ] && continue
+            psql -q "$DATABASE_URL" -c "INSERT INTO payload_migrations (name, batch) VALUES ('$b', 1)"
+          done
       - name: Build
+        env:
+          RESEND_API_KEY: re_ci_dummy
+          STRIPE_SECRET_KEY: sk_test_ci_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+          FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-ci-dummy
+          FLUTTERWAVE_WEBHOOK_SECRET: ci-dummy
+          UPSTASH_REDIS_REST_URL: https://ci-dummy.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: ci-dummy
+          R2_BUCKET: ci-dummy
+          R2_ACCESS_KEY_ID: ci-dummy
+          R2_SECRET_ACCESS_KEY: ci-dummy
+          R2_ACCOUNT_ID: ci-dummy
+          PAYLOAD_DISABLE_SCHEMA_PUSH: "true"
         run: npm run build
       - name: Start server
+        env:
+          RESEND_API_KEY: re_ci_dummy
+          STRIPE_SECRET_KEY: sk_test_ci_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+          FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-ci-dummy
+          FLUTTERWAVE_WEBHOOK_SECRET: ci-dummy
+          UPSTASH_REDIS_REST_URL: https://ci-dummy.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: ci-dummy
+          R2_BUCKET: ci-dummy
+          R2_ACCESS_KEY_ID: ci-dummy
+          R2_SECRET_ACCESS_KEY: ci-dummy
+          R2_ACCOUNT_ID: ci-dummy
+          PAYLOAD_DISABLE_SCHEMA_PUSH: "true"
         run: |
           npm run start &
           npx wait-on http://localhost:3000 -t 60000
-      - name: Seed catalog
-        run: |
-          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
       - name: Playwright (incl. axe-core a11y)
         env:
           PLAYWRIGHT_REUSE_SERVER: "1"
@@ -173,15 +253,54 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Prime DB schema + seed (B5 workaround)
+        # Same pattern as the e2e job — see the quality job's prime step
+        # for the full B5/B2/B1 rationale.
+        run: |
+          npm run dev > devprime.log 2>&1 &
+          npx wait-on http://localhost:3000/api/health -t 180000 || { tail -50 devprime.log; exit 1; }
+          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
+          pkill -f "next dev" || true
+          pkill -f "next-server" || true
+          sleep 2
+          psql "$DATABASE_URL" -c "DELETE FROM payload_migrations WHERE batch = -1"
+          for f in src/payload/migrations/*.ts; do
+            b=$(basename "$f" .ts)
+            [ "$b" = "index" ] && continue
+            psql -q "$DATABASE_URL" -c "INSERT INTO payload_migrations (name, batch) VALUES ('$b', 1)"
+          done
       - name: Build
+        env:
+          RESEND_API_KEY: re_ci_dummy
+          STRIPE_SECRET_KEY: sk_test_ci_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+          FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-ci-dummy
+          FLUTTERWAVE_WEBHOOK_SECRET: ci-dummy
+          UPSTASH_REDIS_REST_URL: https://ci-dummy.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: ci-dummy
+          R2_BUCKET: ci-dummy
+          R2_ACCESS_KEY_ID: ci-dummy
+          R2_SECRET_ACCESS_KEY: ci-dummy
+          R2_ACCOUNT_ID: ci-dummy
+          PAYLOAD_DISABLE_SCHEMA_PUSH: "true"
         run: npm run build
       - name: Start server
+        env:
+          RESEND_API_KEY: re_ci_dummy
+          STRIPE_SECRET_KEY: sk_test_ci_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+          FLUTTERWAVE_SECRET_KEY: FLWSECK_TEST-ci-dummy
+          FLUTTERWAVE_WEBHOOK_SECRET: ci-dummy
+          UPSTASH_REDIS_REST_URL: https://ci-dummy.upstash.io
+          UPSTASH_REDIS_REST_TOKEN: ci-dummy
+          R2_BUCKET: ci-dummy
+          R2_ACCESS_KEY_ID: ci-dummy
+          R2_SECRET_ACCESS_KEY: ci-dummy
+          R2_ACCOUNT_ID: ci-dummy
+          PAYLOAD_DISABLE_SCHEMA_PUSH: "true"
         run: |
           npm run start &
           npx wait-on http://localhost:3000 -t 60000
-      - name: Seed catalog
-        run: |
-          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
       - name: Lighthouse CI
         run: npx --yes @lhci/cli@0.14.x autorun
         env:
