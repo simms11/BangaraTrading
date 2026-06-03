@@ -29,20 +29,19 @@
     "npm": ">=10"
   },
   "dependencies": {
-    "@payloadcms/db-postgres": "3.84.1",
-    "@payloadcms/next": "3.84.1",
-    "@payloadcms/payload-cloud": "3.84.1",
-    "@payloadcms/plugin-seo": "^3.84.1",
-    "@payloadcms/richtext-lexical": "3.84.1",
-    "@payloadcms/storage-s3": "^3.84.1",
-    "@payloadcms/ui": "3.84.1",
+    "@payloadcms/db-postgres": "3.85.0",
+    "@payloadcms/next": "3.85.0",
+    "@payloadcms/plugin-seo": "^3.85.0",
+    "@payloadcms/richtext-lexical": "3.85.0",
+    "@payloadcms/storage-s3": "^3.85.0",
+    "@payloadcms/ui": "3.85.0",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-dropdown-menu": "^2.1.6",
     "@radix-ui/react-navigation-menu": "^1.2.5",
     "@radix-ui/react-slot": "^1.1.2",
     "@react-email/components": "^0.0.40",
     "@react-email/render": "^1.4.0",
-    "@sentry/nextjs": "^8.55.0",
+    "@sentry/nextjs": "^10.56.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "class-variance-authority": "^0.7.1",
@@ -52,7 +51,7 @@
     "lucide-react": "^0.475.0",
     "nanoid": "^5.1.11",
     "next": "15.4.11",
-    "payload": "3.84.1",
+    "payload": "3.85.0",
     "pino": "^9.14.0",
     "react": "19.1.2",
     "react-dom": "19.1.2",
@@ -62,6 +61,12 @@
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.24.1"
+  },
+  "overrides": {
+    "dompurify": "^3.4.8",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -77,6 +82,6 @@
     "tailwindcss": "^4.0.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.8"
   }
 }

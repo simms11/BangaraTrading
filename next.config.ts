@@ -86,14 +86,21 @@ const nextConfig: NextConfig = {
 //
 // `silent: true` keeps the Sentry CLI quiet during local builds; the
 // upload only runs when SENTRY_AUTH_TOKEN is set (CI / Vercel env).
-// `hideSourceMaps: true` prevents serving the maps publicly while still
-// uploading them to Sentry. `widenClientFileUpload: true` includes the
+// `sourcemaps.deleteSourcemapsAfterUpload: true` prevents serving the maps
+// publicly while still uploading them to Sentry (replaces v8's
+// `hideSourceMaps`). `widenClientFileUpload: true` includes the
 // Next runtime chunks so router transitions also resolve.
 export default withSentryConfig(withPayload(nextConfig), {
   silent: !process.env.SENTRY_AUTH_TOKEN,
-  hideSourceMaps: true,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
   widenClientFileUpload: true,
-  disableLogger: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,

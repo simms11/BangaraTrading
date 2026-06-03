@@ -41,17 +41,15 @@ export default defineConfig({
     // Critical: every file shares one Postgres DB. fileParallelism: false
     // makes Vitest run files sequentially (without it, a test file can
     // truncate the DB while another's test is mid-insert and we hit
-    // FK violations on freshly-deleted vendors). pool: 'forks' + singleFork
-    // additionally guarantees no test runs in parallel even at the in-file
-    // level — Payload's `getPayload()` caches the connection, and we want
-    // one cached client per run.
+    // FK violations on freshly-deleted vendors). pool: 'forks' +
+    // maxWorkers: 1 + isolate: false (Vitest 4's replacement for
+    // singleFork) additionally guarantees no test runs in parallel even
+    // at the in-file level — Payload's `getPayload()` caches the
+    // connection, and we want one cached client per run.
     fileParallelism: false,
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    maxWorkers: 1,
+    isolate: false,
     sequence: {
       concurrent: false,
     },
