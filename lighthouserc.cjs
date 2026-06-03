@@ -19,6 +19,15 @@ module.exports = {
       settings: {
         // Mobile preset by default; bump to desktop for stricter assertions later.
         preset: 'desktop',
+        // Newer Lighthouse stopped appending "Chrome-Lighthouse" to its
+        // network UA. Next 15 streams metadata into the <body> on dynamic
+        // routes UNLESS the UA matches its html-limited-bots list (which
+        // includes Chrome-Lighthouse) — without the token the
+        // meta-description audit scores 0 on every page even though the
+        // tag is served. Restoring it keeps the audit honest with zero
+        // production behavior change.
+        emulatedUserAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Chrome-Lighthouse',
         // Skip PWA category — we're not registering a service worker.
         onlyCategories: [
           'performance',

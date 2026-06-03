@@ -246,13 +246,16 @@ function Feature({
   label: string
   value: string
 }) {
+  // a11y (axe `definition-list`): a <div> group inside a <dl> may only
+  // contain <dt>/<dd> — the icon <span> used to sit beside them and broke
+  // the rule, so it now lives inside the <dt>.
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 rounded-md bg-white p-1.5 text-brand-700">{icon}</span>
-      <div>
-        <dt className="text-xs text-muted-foreground">{label}</dt>
-        <dd className="text-sm font-medium">{value}</dd>
-      </div>
+    <div>
+      <dt className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="rounded-md bg-white p-1.5 text-brand-700">{icon}</span>
+        {label}
+      </dt>
+      <dd className="pl-10 text-sm font-medium">{value}</dd>
     </div>
   )
 }

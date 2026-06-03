@@ -36,8 +36,9 @@ test.describe('Storefront — browse to checkout', () => {
     await page.goto('/products/ayishas-herbal-sauce-original')
     await expect(page.getByRole('heading', { name: /Ayisha/i })).toBeVisible()
 
-    // Add to cart with quantity 2.
-    const qty = page.getByLabel('Quantity').first()
+    // Add to cart with quantity 2. exact: true — the substring default also
+    // matches the "Decrease quantity" button, which precedes the input.
+    const qty = page.getByLabel('Quantity', { exact: true }).first()
     await qty.fill('2')
     await page.getByRole('button', { name: /Add to cart/i }).click()
 
@@ -69,8 +70,9 @@ test.describe('Storefront — browse to checkout', () => {
         updatedAt: Date.now(),
       }),
     )
+    // Playwright cookies take `url` OR `domain`+`path` — not both.
     await context.addCookies([
-      { name: 'bangarah_cart', value: cartValue, url: 'http://localhost:3000', path: '/' },
+      { name: 'bangarah_cart', value: cartValue, url: 'http://localhost:3000' },
     ])
     await page.goto('/checkout')
     await expect(page.getByText('Shipping address')).toBeVisible()

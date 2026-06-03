@@ -108,7 +108,11 @@ export const Users: CollectionConfig = {
         const doRevoke = async () => {
           try {
             const { revokeUserSessions } = await import('@/lib/user-sessions')
-            const result = await revokeUserSessions(req.payload, targetId)
+            // retryWhileEmpty: this deferred callback can beat the demoting
+            // transaction's commit (setImmediate fallback) — see the helper.
+            const result = await revokeUserSessions(req.payload, targetId, {
+              retryWhileEmpty: true,
+            })
             if ('revoked' in result) {
               req.payload.logger?.info?.(
                 `[users] revoked ${result.revoked} live session(s) for ${targetEmail}`,

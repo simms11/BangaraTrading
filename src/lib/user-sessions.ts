@@ -24,12 +24,28 @@ import type { Payload } from 'payload'
 export async function revokeUserSessions(
   payload: Payload,
   userId: number | string,
+  opts?: { retryWhileEmpty?: boolean },
 ): Promise<{ revoked: number } | { error: 'no_pool' }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pool = (payload.db as any).pool as
     | { query: (text: string, params?: unknown[]) => Promise<{ rowCount: number | null }> }
     | undefined
   if (!pool) return { error: 'no_pool' }
-  const r = await pool.query(`DELETE FROM users_sessions WHERE _parent_id = $1`, [userId])
-  return { revoked: r.rowCount ?? 0 }
+  // retryWhileEmpty — for the DEFERRED callers (Users/Vendors afterChange).
+  // Their setImmediate fallback can fire before the demoting transaction
+  // commits, and Payload's update rewrites the users_sessions array rows
+  // in-transaction: a DELETE racing the commit matches zero rows while the
+  // re-inserted copies survive (observed as a CI-only flake in round6 M2).
+  // Re-running the DELETE a few times covers the post-commit rows. Callers
+  // on the request path (sign-out) omit it: a user with no session rows is
+  // normal there and shouldn't pay 150ms of retries.
+  const attempts = opts?.retryWhileEmpty ? 4 : 1
+  let revoked = 0
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 50))
+    const r = await pool.query(`DELETE FROM users_sessions WHERE _parent_id = $1`, [userId])
+    revoked = r.rowCount ?? 0
+    if (revoked > 0) break
+  }
+  return { revoked }
 }

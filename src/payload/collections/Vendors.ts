@@ -136,7 +136,9 @@ export const Vendors: CollectionConfig = {
               const { revokeUserSessions } = await import('@/lib/user-sessions')
               for (const u of linkedUsers as Array<{ id: number | string; email?: string }>) {
                 try {
-                  await revokeUserSessions(req.payload, u.id)
+                  // retryWhileEmpty: deferred callback can beat the vendor
+                  // update's commit (setImmediate fallback) — see the helper.
+                  await revokeUserSessions(req.payload, u.id, { retryWhileEmpty: true })
                   const { invalidateUserAuthCache } = await import('@/lib/auth')
                   invalidateUserAuthCache(u.id)
                   req.payload.logger?.info?.(
