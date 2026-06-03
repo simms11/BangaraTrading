@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master, rebuild/v2]
+  push:
+    branches: [main, master, rebuild/v2]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PAYLOAD_SECRET: ci-only-secret-do-not-use-in-prod
+  DATABASE_URL: postgres://postgres:postgres@localhost:5432/bangarah
+  NEXT_PUBLIC_SITE_URL: http://localhost:3000
+  SEED_TOKEN: ci
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bangarah
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Assert non-prod DATABASE_URL
+        # H10 (M11): if a future PR or secret leak ever overrides DATABASE_URL
+        # in CI, refuse to run. Every CI job must point at the local services
+        # postgres (postgres@localhost) or a *_test database — never prod.
+        run: |
+          if ! echo "$DATABASE_URL" | grep -Eq '^postgres://postgres:postgres@localhost' \
+             && ! echo "$DATABASE_URL" | grep -Eq '_test(\?|$)'; then
+            echo "Refusing to run: DATABASE_URL ($DATABASE_URL) does not look like a CI/test DB" >&2
+            exit 1
+          fi
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        id: build
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+      - name: Bundle-size budget
+        run: node scripts/check-bundle-size.mjs build.log
+
+  e2e:
+    name: Playwright + axe-core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bangarah
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Start server
+        run: |
+          npm run start &
+          npx wait-on http://localhost:3000 -t 60000
+      - name: Seed catalog
+        run: |
+          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
+      - name: Playwright (incl. axe-core a11y)
+        env:
+          PLAYWRIGHT_REUSE_SERVER: "1"
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14
+
+  integration:
+    name: Integration (Vitest · money-path)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bangarah
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Tests resolve DATABASE_URL_TEST first; the dedicated DB keeps the
+      # name "_test" so the setup-script safety guard accepts it. Payload
+      # pushes schema into a fresh DB on the first vitest run.
+      DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/bangarah_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Create test database
+        run: npm run test:integration:setup-db
+      - name: Run integration tests
+        run: npm run test:integration
+
+  lighthouse:
+    name: Lighthouse CI (perf + a11y budgets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bangarah
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Start server
+        run: |
+          npm run start &
+          npx wait-on http://localhost:3000 -t 60000
+      - name: Seed catalog
+        run: |
+          curl -fsS -X POST -H "x-seed-token: ci" http://localhost:3000/api/dev/seed
+      - name: Lighthouse CI
+        run: npx --yes @lhci/cli@0.14.x autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

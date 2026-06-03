@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+@plugin 'tailwindcss-animate';
+
+/* ============================================================
+   Bangarah design tokens
+   Brand: trust + warmth. Deep blue anchor, signature gold, warm
+   terracotta accent that hints at sauces/honey provenance.
+   ============================================================ */
+
+@theme {
+  /* Brand */
+  --color-brand-50: #eff5ff;
+  --color-brand-100: #dbe7fe;
+  --color-brand-200: #bfd5fe;
+  --color-brand-300: #93b9fd;
+  --color-brand-400: #6093fa;
+  --color-brand-500: #3b6ef6;
+  --color-brand-600: #2551eb;
+  --color-brand-700: #1d3fd8;
+  --color-brand-800: #1e35af;
+  --color-brand-900: #0f1d4d;
+  --color-brand-950: #0a1335;
+
+  /* Accent (signature gold) */
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde58a;
+  --color-accent-300: #fbd24e;
+  --color-accent-400: #fabe25;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+  --color-accent-800: #92400e;
+  --color-accent-900: #78350f;
+
+  /* Spice (warm terracotta — sauce/honey/Caribbean provenance) */
+  --color-spice-50: #fef4f0;
+  --color-spice-100: #fde6dd;
+  --color-spice-200: #facbb9;
+  --color-spice-300: #f5a387;
+  --color-spice-400: #ee7553;
+  --color-spice-500: #e6532f;
+  --color-spice-600: #d33d20;
+  --color-spice-700: #b02d1b;
+  --color-spice-800: #8c281d;
+  --color-spice-900: #74251c;
+
+  /* Surface */
+  --color-background: #fdfcf9;
+  --color-foreground: #0f172a;
+  --color-muted: #f5f3ee;
+  --color-muted-foreground: #57534e;
+  --color-border: #e7e2d8;
+  --color-ring: var(--color-brand-600);
+
+  /* Typography */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Inter', ui-serif, serif;
+
+  /* Radius */
+  --radius: 0.75rem;
+}
+
+/* Base styles */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    @apply text-balance;
+  }
+
+  /* Focus visible — accessible, brand-aware */
+  :focus-visible {
+    @apply outline-none ring-2 ring-offset-2;
+    --tw-ring-color: var(--color-ring);
+    --tw-ring-offset-color: var(--color-background);
+  }
+
+  /* Reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .container-prose {
+    @apply mx-auto w-full max-w-6xl px-6 lg:px-8;
+  }
+}
