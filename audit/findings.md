@@ -160,7 +160,16 @@ The id-cursor (`where.id.greater_than`) keeps each page independent of mutations
 2. OR: when `after()` throws, enqueue a Payload job (`revokeUserSessions`) rather than calling `setImmediate`. The job runs in its own transaction context cleanly. Adds a small job-type but is durable across instance teardown.
 **Status:** OPEN. M11 stays as MINOR per OQ5 — currently unreachable in code (no non-HTTP path calls `payload.update` on Users/Vendors). Becomes real if a future job/CLI ever touches Users.role; revisit then with one of the two proper fixes above. **The Phase 2 attempt is a worked example of "stop if the fix breaks something else."**
 
-### ID: M12 — REOPENED (status: OPEN; was incorrectly closed-by-design — see verdict below)
+### ID: M12 — FIXED (2026-06-04, Phase 5.25)
+**Diff:**
+- `src/payload/migrations/20260604_phase_5_25_refund_cap_trigger.ts` (NEW) — `BEFORE INSERT OR UPDATE` trigger `refunds_cap_check` + plpgsql function `refunds_enforce_cap()` on `refunds`, registered in `src/payload/migrations/index.ts`. `SELECT … FOR UPDATE` on the parent order row serialises every refund write per order across all connections/code paths; the cap sum is computed atomically with the write. `down()` drops trigger + function. SQL exported as `UP_SQL`/`DOWN_SQL` so the test applies the exact shipped artifact.
+- Two approved deviations from the spec'd SQL (both strengthen, neither weakens): (a) counted statuses match the app check exactly INCLUDING K3 — `cancelled` rows holding a `processor_ref` consume cap (spec-literal set would have re-opened K3 at the DB layer); (b) a skip branch exempts rows whose NEW state doesn't count (failed; cancelled-without-ref) — without it, e.g. a description edit on a failed 0.8×total row would be spuriously rejected once a legitimate full refund exists (failed-row amount + full refund > total).
+- The app-level beforeChange cap check stays untouched (friendlier errors); the trigger is the backstop no code path can bypass.
+- Applied to the local dev DB via the same SQL (verified: `pg_get_functiondef` on dev is byte-identical to the test-DB artifact created from `UP_SQL`). Fresh DBs get it from the registered migration once the pre-launch migrate step (B5/B2) is wired.
+**Test:** `tests/integration/access/m12-refund-cap-trigger.test.ts` (5 cases). Fail-before/pass-after is deterministic — two explicit interleaved transactions reproduce the exact production race: (1) WITHOUT the trigger both writers commit an over-cap pair (demonstrated red: 2 rows, 32,000 committed against a 20,000 order); (2) WITH it, writer 2 demonstrably blocks on the order-row lock (250ms settled-check), then rejects with `refund_cap_exceeded`, exactly one row lands; (3) two concurrent over-cap `payload.create`s net exactly one refund; (4) within-cap refund (== total) still succeeds; (5) skip branch: updating a non-counted failed row at cap is not rejected.
+**Verified:** full suite 46 files / 152 tests passing, `tsc --noEmit` clean, lint clean.
+
+### ID: M12.reopen-analysis (history)
 **Why reopened:** The earlier close-by-design relied on M9's advisory lock fully bracketing the write. The M9 fallback path (no `req.transactionID`) takes `pg_advisory_lock` on a POOLED CLIENT, separate from the Payload-managed transaction connection that actually commits the row. The lock therefore brackets the cap-check READ but does NOT bracket the COMMIT — between cap-check-pass and commit-lands, a second worker can read pre-commit state and also see "cap available". The in-code comment in `src/payload/collections/Refunds.ts:124–127` admits exactly this: "it doesn't strictly bracket the write, but it shrinks the race window dramatically." Per-row `idempotencyKey` (existing) only dedupes retries of the SAME row; concurrent SIBLING rows with distinct references have distinct keys and Stripe processes both. The paid-after-cancel auto-refund path is the canonical no-`req` caller, so the residual window is real and reachable in production.
 
 The transaction-session path (when `req.transactionID` IS set) uses `pg_advisory_xact_lock` on the transaction connection, which IS released at COMMIT — that path is race-free. The remaining exposure is exclusively the no-`req` / fallback path.
@@ -178,7 +187,7 @@ This is a closed atomic check inside the same transaction as the write, with row
 
 **Test plan when implemented:** under the no-`req` path, fire two concurrent `payload.create({ collection: 'refunds', overrideAccess: true, ... })` whose sum exceeds order total; ASSERT exactly one succeeds and the other rejects with `refund_cap_exceeded`. Without the trigger the test will FAIL (both can succeed under the current race window — the existing app-level cap check passes for both); with the trigger it will pass.
 
-**Status:** OPEN — fix not applied this session. Should ship as part of a Phase 5.25 (or Phase 3 of this audit) once we have appetite for a DB migration and a real-build verification path.
+**Status:** ~~OPEN~~ → **FIXED 2026-06-04** as Phase 5.25 — the DB-trigger fix above was applied with user approval after a red-then-green demonstration (see the FIXED block at the top of this entry).
 
 ### ID: M12.original
 **Severity:** MAJOR
@@ -520,7 +529,7 @@ Phase 2 is not touching deploy tooling further. The findings below are recorded 
 4. Flip `.env.example` default to `PAYLOAD_DISABLE_SCHEMA_PUSH=true` so new operators don't accidentally re-enable dev-mode push against prod (and so the comment "CI/CD must run db:migrate" actually matches the reality once #2 is in place).
 5. Add a CI smoke test that catches regressions: provision a fresh `_cold` test DB in CI, run `db:migrate`, then `next build`, then teardown. If this passes once, the project is genuinely cold-deployable; if it breaks in a future change, CI flags it before prod.
 
-**Status:** OPEN. The load-bearing pipeline finding. Not closing in Phase 2.
+**Status:** ~~OPEN~~ → **PRE-LAUNCH TASK (2026-06-04).** User confirmed the site is local-only and has never been deployed — there is no production schema to be wrong, so B5 is not a live bug. The read-only `payload_migrations` prod check is moot (no prod DB exists). Reframed as a before-first-deploy checklist item; see "BEFORE FIRST DEPLOY" section at the end of this document. No pipeline tooling built now.
 
 ### B1 — (downgraded) Build-worker DDL race is a SYMPTOM of B5, not a standalone bug
 **Severity:** INFO (was MAJOR — reclassified after B5 analysis)
@@ -574,7 +583,7 @@ This is unrecoverable without intervention: each subsequent build worker hits th
 3. **Upgrade `payload`, `@payloadcms/db-postgres`, `tsx`, `undici` together to a known-good combination.** Risky for an audit — semver-major surface drift.
 4. **Wait for upstream Payload to fix the tsImport global-registration issue.** No timeline known.
 
-**Status:** OPEN. Requires upstream fix or a focused tooling sprint. Not closing in Phase 2.
+**Status:** ~~OPEN~~ → **PRE-LAUNCH BLOCKER (2026-06-04).** Matters because B5's eventual fix depends on a working migrate CLI, but not urgent while the site is local-only. Deferred to the before-first-deploy work package; see "BEFORE FIRST DEPLOY" section at the end of this document.
 
 ### B3 — Build-time data fetch routes (reported, not a regression)
 **Severity:** INFO
@@ -626,8 +635,25 @@ Each with a dedicated regression test in `tests/integration/`:
 
 ### Confirmed OPEN at close (one line each)
 - **M11** — `after()`→`setImmediate` fallback for role-change session revocation is currently unreachable (no non-HTTP path writes Users/Vendors roles; OQ5) — demoted MINOR and deferred rather than forced.
-- **M12** — sibling refund rows carry different Stripe idempotency keys, so the over-refund cap can be exceeded under concurrency; the per-order cap re-check / DB-trigger fix is designed but deliberately NOT applied speculatively.
+- **M12** — ~~OPEN~~ **FIXED 2026-06-04** (Phase 5.25): DB-level `refunds_cap_check` trigger applied; see the M12 entry for the diff, the red-then-green concurrency proof, and the two approved deviations.
 - **B5** — no migration step exists in any deploy pipeline; cold deploy is unproven and empirically fails — the load-bearing deployment finding; inherits the build-hang/dev-sentinel diagnosis above.
 - **B2** — `payload migrate` CLI fails on Node 20/22/25 (undici 7 / tsx ESM loader); blocks wiring B5's pre-build migrate step.
 
 **Phase 2 is CLOSED.** B5+B2 form the separate deployment work package (entry point documented above); M12's trigger fix is scheduled deliberately; all other open items are recorded with proposed fixes in their entries.
+
+---
+
+## BEFORE FIRST DEPLOY (added 2026-06-04 — site confirmed local-only, never deployed)
+
+B5 and B2 are reframed: not live bugs (no prod schema exists), but **blockers for the first deploy**. Do NOT deploy until every box below is checked. Estimated: half-day to one day of focused tooling work (mostly B2).
+
+1. **Fix B2 first** — `payload migrate` CLI fails on Node 20 (undici 7 `CacheStorage` crash), Node 22, and Node 25 (tsx ESM loader not globally registered → `ERR_UNSUPPORTED_DIR_IMPORT`). Nothing below can be wired until the CLI (or a programmatic equivalent) actually runs. Candidate fixes and failed workarounds are recorded in B2 above.
+2. **Wire a pre-build migrate step** (B5) — pick one runner and wire it so `npm run db:migrate` runs ONCE, single-process, BEFORE `next build`:
+   - Vercel: `vercel.json` → `"buildCommand": "npm run db:migrate && npm run build"`, or
+   - CI: a release-workflow step that migrates the target DB before promoting.
+3. **Set `PAYLOAD_DISABLE_SCHEMA_PUSH=true` in the production environment** — and flip the `.env.example` default to `true` so a future operator can't accidentally dev-push against prod. (Today's default is `false`, i.e. dev mode.)
+4. **Avoid the dev-sentinel interactive hang** — if the target DB ever saw a dev-mode schema push, `payload_migrations` contains `(name='dev', batch=-1)` and migrate-on-init stops at an interactive y/N prompt inside the non-TTY build worker, hanging the build forever. The migrate step must run against a DB without the sentinel, or assert its absence and fail loudly: `SELECT 1 FROM payload_migrations WHERE name='dev' AND batch=-1` → abort if found (locally: `DELETE` that row before building after a test run).
+5. **Prove the cold deploy before going live** — provision a genuinely empty DB, run the migrate step, run `next build`, verify schema materialises and the build exits 0. This has never succeeded (B1's empirical record explains why); the first deploy must not be the first attempt.
+6. **Add the CI cold-deploy smoke test** (B5 fix item 5) — fresh `_cold` DB → `db:migrate` → `next build` → teardown, so regressions are caught before they reach a real deploy.
+
+Until then: local dev keeps using schema push; nothing in this section blocks local work.

@@ -12,6 +12,7 @@ import * as phase516Sessions from './20260521_phase_5_16_user_sessions'
 import * as phase518Indexes from './20260526_phase_5_18_indexes_and_constraints'
 import * as phase523AuditKind from './20260601_phase_5_23_audit_kind_payout'
 import * as phase524AuditKindUserDeleted from './20260603_phase_5_24_audit_kind_user_deleted'
+import * as phase525RefundCapTrigger from './20260604_phase_5_25_refund_cap_trigger'
 
 export const migrations: Array<{
   up: (args: MigrateUpArgs) => Promise<void>
@@ -61,5 +62,14 @@ export const migrations: Array<{
     name: phase524AuditKindUserDeleted.name,
     up: phase524AuditKindUserDeleted.up,
     down: phase524AuditKindUserDeleted.down,
+  },
+  // Phase 5.25 (audit M12): BEFORE INSERT OR UPDATE trigger on refunds that
+  // enforces the cumulative refund cap atomically with the write (row-level
+  // FOR UPDATE lock on the parent order). Durable backstop for the
+  // no-`req` race the app-level cap check cannot close.
+  {
+    name: phase525RefundCapTrigger.name,
+    up: phase525RefundCapTrigger.up,
+    down: phase525RefundCapTrigger.down,
   },
 ]
