@@ -18,6 +18,11 @@ export function LineItemRow({ line }: { line: CartLineItem }) {
   // (2)(3)(4); only the last commit stuck and the user saw a stutter).
   const qtyRef = React.useRef(line.quantity)
   React.useEffect(() => {
+    // Intentional prop->state sync: when the canonical line.quantity changes
+    // externally (server reconciliation, cart merge), re-seed the local edit
+    // state and the rapid-click ref. This is the deliberate case the
+    // set-state-in-effect rule flags but cannot distinguish from a loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQty(line.quantity)
     qtyRef.current = line.quantity
   }, [line.quantity])

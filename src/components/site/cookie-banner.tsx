@@ -36,7 +36,13 @@ export function CookieBanner() {
   const [analytics, setAnalytics] = React.useState(false)
 
   React.useEffect(() => {
+    // Consent lives in localStorage, which is unavailable during SSR. We
+    // intentionally render closed on the server (matching first client paint
+    // to avoid a hydration mismatch) and open the banner from this mount-only
+    // effect when no prior consent exists — the legitimate case the
+    // set-state-in-effect rule can't distinguish from a render loop.
     const existing = loadConsent()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!existing) setOpen(true)
   }, [])
 

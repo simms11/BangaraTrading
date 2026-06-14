@@ -69,3 +69,6 @@ src/app/\(payload\)/admin/importMap.js
 
 # Claude Code local session state (per-machine, never committed)
 /.claude/
+
+# CI build output (transient, parsed by scripts/check-bundle-size.mjs)
+build*.log

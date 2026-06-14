@@ -1,14 +1,14 @@
-import { dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { FlatCompat } from '@eslint/eslintrc'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const compat = new FlatCompat({ baseDirectory: __dirname })
+// eslint-config-next 16 ships native flat configs (arrays) at its subpath
+// exports, so we spread them directly. The old FlatCompat shim broke on v16
+// (its config now has a circular structure that FlatCompat's validator can't
+// JSON-stringify), and `next lint` was removed in Next 16 — the lint script
+// now invokes `eslint .` against this flat config.
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals'
+import nextTypescript from 'eslint-config-next/typescript'
 
 const eslintConfig = [
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   {
     ignores: [
       '.next/**',
