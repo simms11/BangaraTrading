@@ -1,0 +1,9 @@
+{
+  "_note": "TEMPORARILY REMOVED from vercel.json so the Hobby-plan deploy could proceed. The Hobby plan does not support a */15 (every-15-minutes) cron — it only allows once-per-day schedules. RESTORE this `crons` block into vercel.json for production (a Pro plan supports the 15-minute cadence). This drives the Payload jobs queue runner.",
+  "crons": [
+    {
+      "path": "/api/payload-jobs/run",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
